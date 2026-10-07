@@ -150,6 +150,7 @@ def test_open_db_creates_a_private_directory(tmp_path, monkeypatch):
     assert (tmp_path / "store" / db.DB_NAME).exists()
     assert (tmp_path / "store").stat().st_mode & 0o777 == 0o700
     assert (tmp_path / "store" / db.DB_NAME).stat().st_mode & 0o777 == 0o600
+    assert connection.execute("SELECT COUNT(*) FROM exercise").fetchone()[0] >= 40
 
 
 def test_open_db_tightens_an_existing_directory(tmp_path, monkeypatch):

@@ -133,10 +133,12 @@ def _apply(conn: sqlite3.Connection, version: int, file: Path) -> None:
 
 
 def open_db() -> sqlite3.Connection:
-    """Open the user's database, creating and migrating it as needed.
+    """Open the user's database: create, migrate and load the exercise library.
 
     The directory and the database are readable by the owner only.
     """
+    from coach.seed import load_seed
+
     directory = data_dir()
     directory.mkdir(mode=PRIVATE_DIR, parents=True, exist_ok=True)
     directory.chmod(PRIVATE_DIR)
@@ -145,4 +147,5 @@ def open_db() -> sqlite3.Connection:
     path.chmod(PRIVATE_FILE)
     conn = connect(path)
     migrate(conn, backup_dir=directory)
+    load_seed(conn)
     return conn
