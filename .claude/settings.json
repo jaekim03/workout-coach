@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/.workout-coach/**)",
+      "Edit(~/.workout-coach/**)",
+      "Read(.env)",
+      "Edit(.env)",
+      "Read(.env.*)",
+      "Edit(.env.*)"
+    ]
+  }
+}
