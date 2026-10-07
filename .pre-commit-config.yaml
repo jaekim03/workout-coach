@@ -1,0 +1,16 @@
+# Privacy layer 3 (DESIGN §13.2). Installed by `make setup`.
+repos:
+  - repo: local
+    hooks:
+      - id: check-private
+        name: check_private (no personal training information)
+        entry: uv run python scripts/check_private.py --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: gitleaks
+        name: gitleaks (no secrets)
+        entry: gitleaks git --pre-commit --staged --redact --no-banner
+        language: system
+        pass_filenames: false
+        always_run: true
