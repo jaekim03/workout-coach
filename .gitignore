@@ -28,6 +28,7 @@ __pycache__/
 *.env
 .envrc
 *.sql
+!src/coach/migrations/[0-9][0-9][0-9][0-9]_*.sql
 *.dump
 *.bak
 *.tsv

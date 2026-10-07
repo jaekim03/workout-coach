@@ -18,6 +18,7 @@ OK = b"print('hello')\n"
         ".pre-commit-config.yaml",
         ".claude/settings.json",
         "pyproject.toml",
+        "src/coach/migrations/0001_initial.sql",
     ],
 )
 def test_allowed_paths(name):
@@ -48,7 +49,9 @@ def test_allowed_paths(name):
         "COACH.DB", "History.CSV", ".ENV", ".Env.local", "Data/real.txt",
         "EXPORTS/plan.md", "summary.JSON", "profile.YAML",
         # stricter than the spec (D-37)
-        "dump.sql", "history.tsv", "sets.jsonl", "coach.db.gz", "coach.db.bak",
+        "dump.sql", "src/coach/migrations/dump.sql", "src/coach/migrations/0001_Initial.SQL",
+        "migrations/0001_initial.sql", "src/coach/migrations/sub/0001_initial.sql",
+        "history.tsv", "sets.jsonl", "coach.db.gz", "coach.db.bak",
         "backup.zip", "log.xls", "a.parquet", "a.pkl", "a.ipynb", "session.png",
         "x.log.1", "history.csv.txt", "prod.env", ".envrc",
         "seed/dump.txt", "seed/notes.md",
@@ -180,3 +183,10 @@ def test_no_mode_is_an_error():
     with pytest.raises(SystemExit) as exit_info:
         check_private.main([])
     assert exit_info.value.code == 2
+
+
+def test_migrations_may_not_carry_literal_rows():
+    name = "src/coach/migrations/0002_change.sql"
+    assert check_file(name, b"ALTER TABLE a ADD COLUMN y INTEGER;\nINSERT INTO b SELECT * FROM a;\n") == []
+    assert check_file(name, b"INSERT INTO set_entry (id) VALUES (1);\n")
+    assert check_file(name, b"insert into profile values (1, 'x');\n")
