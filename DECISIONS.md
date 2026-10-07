@@ -229,7 +229,7 @@ Rationale: One import path for tests, CI and the installed CLI.
 ## D-37: Privacy guard interpretation
 Status: locked
 Type: two-way
-Choice: `check_private.py` exempts exactly three config paths from the structured-file rule (`.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `.claude/settings.json`). Beyond DESIGN §13.2 it also: blocks `.csv` everywhere; matches block rules case-insensitively; blocks archives, dumps, images, video, notebooks and other tabular or pickled formats; allows only `.json` under `seed/`; looks for the SQLite header anywhere in a file; and in CI checks every commit in the range, not the net diff.
+Choice: `check_private.py` exempts exactly three config paths from the structured-file rule (`.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `.claude/settings.json`). Beyond DESIGN §13.2 it also: blocks `.csv` everywhere; matches block rules case-insensitively; blocks archives, dumps, images, video, notebooks and other tabular or pickled formats; allows only `.json` under `seed/`; allows `.sql` only as `src/coach/migrations/NNNN_name.sql`; looks for the SQLite header anywhere in a file; and in CI checks every commit in the range, not the net diff. A migration file may not contain `VALUES` (literal rows); copying between tables uses `INSERT ... SELECT`.
 Rationale: DESIGN §13.1 requires those three files; the repo is public, so the guard errs on the strict side and a file added then removed in one PR must still be caught.
 
 ## D-38: How a `/decisions` answer is recorded and checked
@@ -329,3 +329,51 @@ Status: locked
 Type: two-way
 Choice: A rejected agent output is retried once with the errors appended. Second failure: `block_plan` repeats the previous template (or stops if there is none); `session_review` makes no adjustments except dropping slots with pain ≥ 4 for the next session. Warnings never trigger a retry.
 Rationale: DESIGN §6.5 failure handling.
+
+## D-54: How are schema changes applied to an existing database?
+Status: locked
+Type: two-way
+Choice: Numbered forward-only `.sql` files in `src/coach/migrations/`, tracked with SQLite's `user_version`. Each runs in its own transaction; the database is copied inside the data directory before pending migrations run; a database newer than the code is refused. A migration that exists on the base branch may not be edited or removed (`check_decisions.py`). Foreign keys are off while a script runs so it can rebuild a referenced table, and `foreign_key_check` must be clean before commit. A script may not contain BEGIN, COMMIT or ROLLBACK. The database file and its backups are readable by the owner only.
+Rationale: The owner's choice; no dependency, and plain SQL carries over to whatever platform D-7 selects.
+
+## D-55: Seed data format and default increments
+Status: locked
+Type: two-way
+Choice: One `seed/exercises.json` holding equipment and exercises, each exercise with its aliases and muscle weights. Default increments in kg: barbell 2.5, dumbbell 2 per hand, cable 5, machine 5, smith_machine 2.5, plate_loaded 2.5, fixed_barbell 5; none for pull-up bar, dip station, bench and rack. Re-loading the seed never overwrites existing equipment rows.
+Rationale: The owner's choice; real increments and availability are entered at onboarding and stay in the data directory.
+
+## D-56: Equipment names in the seed
+Status: locked
+Type: two-way
+Choice: The seed adds `smith_machine`, `plate_loaded`, `fixed_barbell` and `dip_station` to the seven names in DESIGN §4. The library is general: about 60 exercises, covering every movement pattern and muscle both with and without a free barbell and rack.
+Rationale: Each equipment row holds one load increment, and plates, weight stacks and preloaded bars step differently; many commercial gyms have a Smith machine and no free barbell. The `equipment.name` column has no CHECK, so this does not change the schema.
+
+## D-57: Effort class of Smith machine and plate-loaded lifts
+Status: locked
+Type: two-way
+Choice: `HEAVY` = squat or hinge pattern, equipment barbell or smith_machine, and a 1.0 weight on quads or hamstrings; hip thrusts (glutes only) are therefore `COMPOUND`. `stable` = machine, cable or plate_loaded. DESIGN §5.0 is updated to match.
+Rationale: The owner's choices: a Smith squat or RDL loads the whole body about as hard as the free-bar lift, and a hip thrust does not. Plate-loaded machines are guided like selectorized ones.
+
+## D-58: Exercises left out of the v1 library
+Status: locked
+Type: two-way
+Choice: No assisted pull-up or dip (more weight makes the rep easier, which the progression rules do not model). No hip adduction or abduction, glute kickback, back extension or timed holds such as planks (the muscle list has no adductors, DESIGN §4's mapping table does not cover them, and holds are not counted in reps). No weighted pull-ups or dips (bodyweight exercises carry no load).
+Rationale: The owner's choice for assisted lifts; an "assistance" load type would be a schema change and can be raised later as a one-way decision.
+
+## D-59: What happens when the seed is loaded again?
+Status: locked
+Type: two-way
+Choice: `open_db()` loads the seed on every start. Exercises are matched by exact name and updated; aliases and muscle maps are replaced from the file; an exercise no longer in the file is deleted unless a block slot, set, baseline or limitation refers to it; equipment rows are never overwritten. Aliases are seed-owned and limited to unambiguous spellings and abbreviations: generic names that fit several variants (such as "squat" or "bench press") are left to the step-5 name search. Renaming an exercise creates a new one, and history stays with the old name.
+Rationale: The library must be updatable without touching logged data. Changing the pattern or muscle map of an exercise that has shipped alters how past sets are counted, so treat such an edit as one-way and raise it through /decisions.
+
+## D-60: Which lifts does the V14 adjacency warning cover?
+Status: locked
+Type: two-way
+Choice: V14 warns on two adjacent `HEAVY` slots with target RIR ≤ 2, not only barbell squat and hinge.
+Rationale: The owner's choice; follows D-57, and otherwise the warning could never fire without a free barbell.
+
+## D-61: Can an exercise require more than one piece of equipment?
+Status: open
+Type: one-way
+Choice: Default: no. The `bench` and `rack` rows are kept as DESIGN §4 lists them but no exercise can require them, so their availability filters nothing; a missing bench is handled with a limitation.
+Rationale: A many-to-many exercise-equipment table would change the locked data model. The owner chose to keep the rows for v1.
