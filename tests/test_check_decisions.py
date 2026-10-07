@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import subprocess
+
 from scripts.check_decisions import (
+    changed_migrations,
     config_constants,
     locked_changes,
     numeric_literals,
@@ -146,3 +149,37 @@ def test_run_requires_decisions_file(tmp_path):
 
 def test_this_repo_passes():
     assert run(REPO, None) == []
+
+
+def test_merged_migrations_may_not_change(tmp_path):
+    def git(*args):
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    directory = tmp_path / "src/coach/migrations"
+    directory.mkdir(parents=True)
+    (directory / "0001_a.sql").write_text("CREATE TABLE a (x);\n")
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "synthetic@example.invalid")
+    git("config", "user.name", "Synthetic")
+    git("add", "-A")
+    git("commit", "-q", "-m", "base")
+
+    (directory / "0002_b.sql").write_text("CREATE TABLE b (x);\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "add")
+    (directory / "0002_b.sql").write_text("CREATE TABLE b (y);\n")
+    git("commit", "-q", "-am", "edit a migration that is new in this range")
+    assert changed_migrations("main~2", tmp_path) == []
+
+    (directory / "0001_a.sql").write_text("CREATE TABLE a (y);\n")
+    git("commit", "-q", "-am", "edit merged")
+    assert len(changed_migrations("main~3", tmp_path)) == 1
+
+    git("mv", "src/coach/migrations/0001_a.sql", "src/coach/migrations/0001_z.sql")
+    git("commit", "-q", "-m", "rename merged")
+    assert any("0001_a.sql" in e for e in changed_migrations("main~4", tmp_path))
+
+    (directory / "0001_z.sql").unlink()
+    (directory / "0001_z.sql").symlink_to("0002_b.sql")
+    git("commit", "-q", "-am", "type change")
+    assert any("0001_z.sql" in e for e in changed_migrations("main~1", tmp_path))

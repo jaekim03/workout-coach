@@ -52,6 +52,12 @@ ALLOWED_CONFIG = frozenset(
     {".github/workflows/ci.yml", ".pre-commit-config.yaml", ".claude/settings.json"}
 )
 
+# Schema migrations are the only .sql files allowed (D-37).
+MIGRATION = re.compile(r"src/coach/migrations/\d{4}_[a-z0-9_]+\.sql")
+# A migration changes structure; literal rows would be data (use INSERT ... SELECT
+# to copy between tables).
+SQL_LITERAL_ROWS = re.compile(rb"\bVALUES\b", re.IGNORECASE)
+
 SYNTHETIC_MARKER = "# SYNTHETIC"
 YAML_SYNTHETIC = re.compile(r"^synthetic:\s*true\s*$", re.MULTILINE)
 
@@ -80,12 +86,16 @@ def check_file(name: str, data: bytes) -> list[str]:
         return ["is not a normalized repo-relative path"]
 
     for glob in BLOCKED_FILE_GLOBS:
+        if glob == "*.sql" and MIGRATION.fullmatch(name):
+            continue
         if fnmatch.fnmatchcase(lowered.name, glob):
             problems.append(f"matches blocked pattern {glob}")
     for part in lowered.parts[:-1]:
         if part in BLOCKED_DIRS:
             problems.append(f"is inside blocked directory {part}/")
 
+    if MIGRATION.fullmatch(name) and SQL_LITERAL_ROWS.search(data):
+        problems.append("is a migration that inserts literal rows (VALUES)")
     if SQLITE_HEADER in data:
         problems.append("contains a SQLite database")
     if len(data) > MAX_BYTES:

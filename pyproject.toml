@@ -16,6 +16,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/coach"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"seed/exercises.json" = "coach/exercises.json"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

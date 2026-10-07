@@ -61,7 +61,7 @@ CREATE TABLE profile (
 
 CREATE TABLE equipment (
   id INTEGER PRIMARY KEY,
-  name TEXT UNIQUE NOT NULL,          -- barbell, dumbbell, cable, machine, pullup_bar, bench, rack
+  name TEXT UNIQUE NOT NULL,          -- barbell, dumbbell, cable, machine, pullup_bar, bench, rack (seed adds more: D-56)
   available INTEGER NOT NULL DEFAULT 1,
   increment_kg REAL                   -- smallest load jump (dumbbell: per hand)
 );
@@ -178,7 +178,7 @@ CREATE TABLE set_entry (
 Rules:
 - Generating a session inserts its `set_entry` rows with `presc_*` and `load_modifier` filled and `actual_*` NULL.
 - Logging fills `actual_*`. Edits to past entries are allowed; they affect only future generation, never past prescriptions.
-- Seed ~40 common exercises with aliases, `stretch_bias`, and `exercise_muscle` rows. Every exercise must have ≥1 `exercise_muscle` row. Seed data is generic (exercise library only) and lives in the repo; everything else in the database is personal and lives only in `$COACH_DATA_DIR` (D6).
+- Seed ~60 common exercises (D-56) with aliases, `stretch_bias`, and `exercise_muscle` rows. Every exercise must have ≥1 `exercise_muscle` row. Seed data is generic (exercise library only) and lives in the repo; everything else in the database is personal and lives only in `$COACH_DATA_DIR` (D6).
 
 **`exercise_muscle` seed mapping** (PC/DC; squat/hip-thrust rows E-low, Plotkin 2023):
 
@@ -199,10 +199,10 @@ Rules:
 ### 5.0 Definitions
 - **Tier** from `training_age_months`: `novice < 6`, `intermediate 6–35`, `advanced ≥ 36`. *(PC; cut-points DC)*
 - **Effort class** (derived in code, no column; PC):
-  - `HEAVY` = `squat` or `hinge` pattern with equipment = barbell.
+  - `HEAVY` = `squat` or `hinge` pattern with equipment ∈ {barbell, smith_machine} and a 1.0 weight on quads or hamstrings (so hip thrusts are `COMPOUND`). *(D-57)*
   - `COMPOUND` = any other `squat, hinge, h_push, v_push, h_pull, v_pull, lunge`.
   - `ISOLATION` = `isolation, core`.
-  - `stable` = equipment ∈ {machine, cable}.
+  - `stable` = equipment ∈ {machine, cable, plate_loaded}. *(D-57)*
 - **Region**: `lower` = `squat, hinge, lunge`; all other patterns = `upper`.
 - **`step_pct`** *(E-mod band: ACSM 2009 2–10%; split PC)*:
 
@@ -386,7 +386,7 @@ Pain 1–3 is logged and summarized but does not call the LLM. Otherwise the eng
 | V11 | 3–8 slots per day | warn | PC |
 | V12 | Coverage, warn only if an eligible candidate exists: no leg curl; no side-delt isolation; no overhead triceps extension; no calf raise; no leg extension | warn | E-low (Plotkin 2023; Maeo 2021, 2023) |
 | V13 | Weekly pull sets ≥ 0.9 × push sets | warn | PC |
-| V14 | Isolation/core slot before a compound on the same day; barbell squat and hinge adjacent with `target_rir ≤ 2` | warn | E-mod (order irrelevant for growth, Nunes 2021) |
+| V14 | Isolation/core slot before a compound on the same day; two `HEAVY` slots adjacent with `target_rir ≤ 2` (D-60) | warn | E-mod (order irrelevant for growth, Nunes 2021) |
 | V15 | Vs previous block: < 60% of exercises kept (excluding limitation removals); > 1 compound changed per day; a progressing exercise rotated out | warn | E-low (Kassiano 2022) + PC |
 | V16 | Every slot's exercise has `exercise_muscle` rows | reject | DC |
 

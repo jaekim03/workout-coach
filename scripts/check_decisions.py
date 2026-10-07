@@ -8,6 +8,7 @@ Fails if:
   3. a one-way entry is new as locked, became locked, or changed while locked
      since BASE without a new `Answered:` line, which /decisions writes.
      (Skipped when DECISIONS.md does not exist at BASE: the first import.)
+  4. a migration that exists at BASE was edited or removed.
 
     check_decisions.py [--base REF]
 """
@@ -27,6 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DECISIONS = "DECISIONS.md"
 CONFIG = Path("src/coach/config.py")
 ENGINE_DIR = Path("src/coach/engine")
+MIGRATIONS_DIR = "src/coach/migrations"
 
 ENTRY_HEADING = re.compile(r"^## (D-\d+): .+$", re.MULTILINE)
 ANY_HEADING = re.compile(r"^## .*$", re.MULTILINE)
@@ -192,6 +194,20 @@ def run(root: Path, base_decisions: str | None) -> list[str]:
     return errors
 
 
+def changed_migrations(base: str, root: Path = ROOT) -> list[str]:
+    """Migrations that exist at `base` and were edited, renamed or deleted since.
+
+    A merged migration has already run against a real database, so it changes
+    stored-data shape (one-way, DESIGN §11): add a new migration instead.
+    """
+    out = subprocess.run(
+        ["git", "diff", "--name-only", "--no-renames", "--diff-filter=MDT",
+         base, "HEAD", "--", MIGRATIONS_DIR],
+        cwd=root, check=True, capture_output=True, text=True,
+    ).stdout
+    return [f"{name}: a merged migration must not change" for name in out.split()]
+
+
 def read_at(ref: str) -> str | None:
     """DECISIONS.md at `ref`, or None if the file did not exist there."""
     subprocess.run(
@@ -215,6 +231,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"check_decisions: base {args.base!r} is not a commit", file=sys.stderr)
         return 2
     errors = run(ROOT, base)
+    if args.base is not None:
+        errors.extend(changed_migrations(args.base))
     for error in errors:
         print(f"check_decisions: {error}", file=sys.stderr)
     if errors:
