@@ -144,3 +144,76 @@ def test_removed_exercise_is_kept_only_if_logged_data_uses_it(conn, tmp_path):
     assert names(conn) == {"Synthetic Press"}
     assert conn.execute("SELECT COUNT(*) FROM exercise_alias").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM exercise_muscle").fetchone()[0] == 2
+
+
+# --- the real library (seed/exercises.json) ---
+
+from coach.seed import SEED_FILE
+
+LIBRARY = json.loads(SEED_FILE.read_text())
+PATTERNS = {"squat", "hinge", "h_push", "v_push", "h_pull", "v_pull", "lunge", "core", "isolation"}
+MUSCLES = {
+    "chest", "back", "quads", "hamstrings", "glutes", "side_delts",
+    "rear_delts", "front_delts", "biceps", "triceps", "calves", "abs",
+}
+# Equipment a commercial gym without free barbells or racks still offers.
+NO_BARBELL_GYM = {"dumbbell", "cable", "machine", "smith_machine", "plate_loaded", "fixed_barbell", None}
+
+
+def test_library_loads(conn):
+    count = load_seed(conn)
+    assert count == len(LIBRARY["exercises"]) >= 40
+    without_muscles = conn.execute(
+        "SELECT COUNT(*) FROM exercise e WHERE NOT EXISTS"
+        " (SELECT 1 FROM exercise_muscle m WHERE m.exercise_id = e.id)"
+    ).fetchone()[0]
+    assert without_muscles == 0
+
+
+def test_library_covers_every_pattern_and_muscle():
+    exercises = LIBRARY["exercises"]
+    assert {e["movement_pattern"] for e in exercises} == PATTERNS
+    primary = {m for e in exercises for m, w in e["muscles"].items() if w == 1.0}
+    assert primary == MUSCLES
+
+
+def test_library_works_without_a_free_barbell():
+    usable = [e for e in LIBRARY["exercises"] if e["equipment"] in NO_BARBELL_GYM]
+    assert {e["movement_pattern"] for e in usable} == PATTERNS
+    primary = {m for e in usable for m, w in e["muscles"].items() if w == 1.0}
+    assert primary == MUSCLES
+
+
+def test_library_follows_the_design_muscle_map():
+    expected = {
+        "squat": [{"quads": 1.0, "glutes": 1.0}, {"quads": 1.0, "glutes": 0.5}],
+        "lunge": [{"quads": 1.0, "glutes": 1.0}],
+        "hinge": [{"hamstrings": 1.0, "glutes": 0.5}, {"glutes": 1.0}],
+        "h_push": [{"chest": 1.0, "triceps": 0.5, "front_delts": 0.5}],
+        "v_push": [{"front_delts": 1.0, "triceps": 0.5, "side_delts": 0.5}],
+        "h_pull": [{"back": 1.0, "biceps": 0.5, "rear_delts": 0.5}],
+        "v_pull": [{"back": 1.0, "biceps": 0.5, "rear_delts": 0.5}],
+    }
+    for exercise in LIBRARY["exercises"]:
+        pattern = exercise["movement_pattern"]
+        if pattern in expected:
+            assert exercise["muscles"] in expected[pattern], exercise["name"]
+        else:  # isolation and core train the target muscle only
+            assert list(exercise["muscles"].values()) == [1.0], exercise["name"]
+
+
+def test_library_has_the_gap_fillers():
+    names = {e["name"] for e in LIBRARY["exercises"]}
+    assert {
+        "Seated Leg Curl", "Leg Extension", "Dumbbell Lateral Raise",
+        "Overhead Cable Triceps Extension", "Standing Calf Raise",
+    } <= names
+
+
+def test_bodyweight_exercises_have_no_loaded_equipment():
+    increments = {e["name"]: e["increment_kg"] for e in LIBRARY["equipment"]}
+    for exercise in LIBRARY["exercises"]:
+        if exercise["load_type"] == "bodyweight":
+            assert increments.get(exercise["equipment"]) is None, exercise["name"]
+        else:
+            assert increments[exercise["equipment"]] is not None, exercise["name"]
